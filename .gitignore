@@ -1,0 +1,57 @@
+# Android / Gradle
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Kotlin
+*.class
+*.jar
+*.war
+
+# Android Studio Navigation editor temp files
+.navigation/
+
+# Android Studio captures folder
+captures/
+
+# Keystore files
+*.jks
+*.keystore
+
+# Google Services (if used)
+google-services.json
+
+# Secrets / API keys
+secrets.properties
+*.env
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# Test outputs
+/test-results/
+/test-reports/
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+
+# Workshop pics (keep docs, ignore large images)
+pic/
