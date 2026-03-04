@@ -6,7 +6,10 @@ import com.ergou.app.data.remote.api.DeepSeekService
 import com.ergou.app.data.remote.api.LLMService
 import com.ergou.app.data.repository.ChatRepository
 import com.ergou.app.data.repository.ChatRepositoryImpl
+import com.ergou.app.data.repository.MemoryRepository
+import com.ergou.app.data.repository.MemoryRepositoryImpl
 import com.ergou.app.ui.chat.ChatViewModel
+import com.ergou.app.ui.memory.MemoryViewModel
 import com.ergou.app.util.ApiKeyProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -31,10 +34,12 @@ val appModule = module {
             androidContext(),
             ErgouDatabase::class.java,
             "ergou.db"
-        ).build()
+        ).fallbackToDestructiveMigration(true).build()
     }
     single { get<ErgouDatabase>().sessionDao() }
     single { get<ErgouDatabase>().messageDao() }
+    single { get<ErgouDatabase>().memoryDao() }
+    single { get<ErgouDatabase>().personDao() }
 
     // Ktor HttpClient
     single {
@@ -59,9 +64,11 @@ val appModule = module {
     // LLM Service
     single<LLMService> { DeepSeekService(httpClient = get(), apiKeyProvider = get()) }
 
-    // Repository
+    // Repositories
     single<ChatRepository> { ChatRepositoryImpl(sessionDao = get(), messageDao = get(), llmService = get()) }
+    single<MemoryRepository> { MemoryRepositoryImpl(memoryDao = get(), personDao = get()) }
 
     // ViewModels
-    viewModel { ChatViewModel(chatRepository = get(), apiKeyProvider = get()) }
+    viewModel { ChatViewModel(chatRepository = get(), memoryRepository = get(), apiKeyProvider = get()) }
+    viewModel { MemoryViewModel(memoryRepository = get()) }
 }

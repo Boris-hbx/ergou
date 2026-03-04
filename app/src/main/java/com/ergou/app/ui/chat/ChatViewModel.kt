@@ -6,7 +6,9 @@ import com.ergou.app.data.local.entity.MessageEntity
 import com.ergou.app.data.local.entity.SessionEntity
 import com.ergou.app.data.repository.ChatRepository
 import com.ergou.app.data.repository.ChatRepositoryImpl
+import com.ergou.app.data.repository.MemoryRepository
 import com.ergou.app.util.ApiKeyProvider
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -26,20 +28,25 @@ data class ChatUiState(
 
 class ChatViewModel(
     private val chatRepository: ChatRepository,
+    private val memoryRepository: MemoryRepository,
     private val apiKeyProvider: ApiKeyProvider
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState
 
+    private var messageCollectionJob: Job? = null
+
+    // 记忆指令正则
+    private val memoryPattern = Regex("""\[SAVE_MEMORY:(\w+):(.+?)]""")
+    private val personPattern = Regex("""\[SAVE_PERSON:(.+?):(.+?):(.+?)]""")
+
     init {
-        // 检查API Key
         viewModelScope.launch {
             val key = apiKeyProvider.apiKey.first()
             _uiState.value = _uiState.value.copy(isApiKeySet = key.isNotBlank())
         }
 
-        // 加载会话列表
         viewModelScope.launch {
             chatRepository.getAllSessions().collect { sessions ->
                 _uiState.value = _uiState.value.copy(sessions = sessions)
@@ -75,6 +82,7 @@ class ChatViewModel(
         viewModelScope.launch {
             chatRepository.deleteSession(sessionId)
             if (_uiState.value.currentSessionId == sessionId) {
+                messageCollectionJob?.cancel()
                 _uiState.value = _uiState.value.copy(
                     currentSessionId = null,
                     messages = emptyList()
@@ -83,10 +91,13 @@ class ChatViewModel(
         }
     }
 
-    private suspend fun switchToSession(sessionId: Long) {
+    private fun switchToSession(sessionId: Long) {
+        messageCollectionJob?.cancel()
         _uiState.value = _uiState.value.copy(currentSessionId = sessionId)
-        chatRepository.getMessages(sessionId).collect { messages ->
-            _uiState.value = _uiState.value.copy(messages = messages)
+        messageCollectionJob = viewModelScope.launch {
+            chatRepository.getMessages(sessionId).collect { messages ->
+                _uiState.value = _uiState.value.copy(messages = messages)
+            }
         }
     }
 
@@ -95,16 +106,9 @@ class ChatViewModel(
         if (text.isBlank() || _uiState.value.isSending) return
 
         viewModelScope.launch {
-            // 如果没有当前会话，自动创建
             val sessionId = _uiState.value.currentSessionId ?: run {
                 val id = chatRepository.createSession()
-                _uiState.value = _uiState.value.copy(currentSessionId = id)
-                // 开始监听该会话的消息
-                launch {
-                    chatRepository.getMessages(id).collect { messages ->
-                        _uiState.value = _uiState.value.copy(messages = messages)
-                    }
-                }
+                switchToSession(id)
                 id
             }
 
@@ -120,29 +124,43 @@ class ChatViewModel(
                 chatRepository.saveMessage(sessionId, "user", text)
 
                 // 第一条消息时自动设置标题
-                val messageCount = _uiState.value.messages.size
-                if (messageCount <= 1) {
+                if (_uiState.value.messages.size <= 1) {
                     (chatRepository as? ChatRepositoryImpl)?.generateTitle(sessionId, text)
                 }
 
-                // 流式获取AI回复
+                // 构建动态上下文
+                val peopleContext = memoryRepository.buildPeopleContext()
+                val memoryContext = memoryRepository.buildMemoryContext()
+
+                // 流式获取AI回复（带上下文）
                 val responseBuilder = StringBuilder()
-                chatRepository.sendMessage(sessionId, text).collect { chunk ->
+                val repo = chatRepository as? ChatRepositoryImpl
+
+                val flow = repo?.sendMessageWithContext(sessionId, text, peopleContext, memoryContext)
+                    ?: chatRepository.sendMessage(sessionId, text)
+
+                flow.collect { chunk ->
                     responseBuilder.append(chunk)
                     _uiState.value = _uiState.value.copy(
                         streamingContent = responseBuilder.toString()
                     )
                 }
 
-                // 保存AI回复
                 val fullResponse = responseBuilder.toString()
-                chatRepository.saveMessage(sessionId, "assistant", fullResponse)
+
+                // 解析并执行记忆指令
+                processMemoryCommands(fullResponse, sessionId)
+
+                // 保存AI回复（去掉指令标记）
+                val cleanResponse = cleanMemoryCommands(fullResponse)
+                chatRepository.saveMessage(sessionId, "assistant", cleanResponse)
+
                 _uiState.value = _uiState.value.copy(
                     isSending = false,
                     streamingContent = ""
                 )
 
-                Timber.d("收到回复: ${fullResponse.take(50)}...")
+                Timber.d("收到回复: ${cleanResponse.take(50)}...")
             } catch (e: Exception) {
                 Timber.e(e, "发送消息失败")
                 _uiState.value = _uiState.value.copy(
@@ -152,6 +170,42 @@ class ChatViewModel(
                 )
             }
         }
+    }
+
+    /**
+     * 解析AI回复中的记忆指令并执行
+     */
+    private suspend fun processMemoryCommands(response: String, sessionId: Long) {
+        // 解析记忆保存指令
+        memoryPattern.findAll(response).forEach { match ->
+            val category = match.groupValues[1]
+            val content = match.groupValues[2]
+            if (category in listOf("fact", "habit", "personality", "intent") && content.isNotBlank()) {
+                memoryRepository.saveMemory(category, content, importance = 3, sessionId = sessionId)
+                Timber.d("二狗记住了: [$category] $content")
+            }
+        }
+
+        // 解析人物保存指令
+        personPattern.findAll(response).forEach { match ->
+            val name = match.groupValues[1]
+            val relationship = match.groupValues[2]
+            val notes = match.groupValues[3]
+            if (name.isNotBlank()) {
+                memoryRepository.savePerson(name, relationship, notes = notes)
+                Timber.d("二狗认识了: $name ($relationship)")
+            }
+        }
+    }
+
+    /**
+     * 清除回复中的指令标记，返回干净文本
+     */
+    private fun cleanMemoryCommands(response: String): String {
+        return response
+            .replace(memoryPattern, "")
+            .replace(personPattern, "")
+            .trim()
     }
 
     fun dismissError() {

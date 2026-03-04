@@ -4,8 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.Composable
-import com.ergou.app.ui.chat.ChatScreen
+import com.ergou.app.ui.navigation.ErgouNavigation
 import com.ergou.app.ui.theme.ErgouTheme
 
 class MainActivity : ComponentActivity() {
@@ -14,7 +13,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ErgouTheme {
-                ChatScreen()
+                ErgouNavigation()
             }
         }
     }

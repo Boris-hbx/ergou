@@ -59,10 +59,12 @@ class ChatRepositoryImpl(
     override fun sendMessage(sessionId: Long, userContent: String): Flow<String> = flow {
         // 构建消息历史
         val history = messageDao.getRecentMessages(sessionId, MAX_HISTORY_MESSAGES)
-            .reversed() // 从旧到新
+            .reversed()
             .map { Message(role = it.role, content = it.content) }
 
         val messages = buildList {
+            // System prompt 由 ViewModel 层构建（含动态上下文）
+            // 这里用无上下文版本作为 fallback
             add(Message(role = "system", content = ErgouPrompt.buildSystemPrompt()))
             addAll(history)
             add(Message(role = "user", content = userContent))
@@ -70,15 +72,42 @@ class ChatRepositoryImpl(
 
         val request = ChatRequest(messages = messages, stream = true)
 
-        // 流式收集
         llmService.chatStream(request).collect { chunk ->
             emit(chunk)
         }
     }
 
     /**
-     * 根据第一条用户消息自动生成会话标题
+     * 带动态上下文的消息发送
      */
+    fun sendMessageWithContext(
+        sessionId: Long,
+        userContent: String,
+        peopleContext: String,
+        memoryContext: String
+    ): Flow<String> = flow {
+        val history = messageDao.getRecentMessages(sessionId, MAX_HISTORY_MESSAGES)
+            .reversed()
+            .map { Message(role = it.role, content = it.content) }
+
+        val systemPrompt = ErgouPrompt.buildSystemPrompt(
+            peopleContext = peopleContext,
+            memoryContext = memoryContext
+        )
+
+        val messages = buildList {
+            add(Message(role = "system", content = systemPrompt))
+            addAll(history)
+            add(Message(role = "user", content = userContent))
+        }
+
+        val request = ChatRequest(messages = messages, stream = true)
+
+        llmService.chatStream(request).collect { chunk ->
+            emit(chunk)
+        }
+    }
+
     suspend fun generateTitle(sessionId: Long, firstMessage: String) {
         val title = if (firstMessage.length <= 20) {
             firstMessage

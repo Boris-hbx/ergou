@@ -63,6 +63,7 @@ import org.koin.androidx.compose.koinViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
+    onNavigateToMemory: () -> Unit = {},
     viewModel: ChatViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -91,7 +92,8 @@ fun ChatScreen(
                     viewModel.onSwitchSession(id)
                     scope.launch { drawerState.close() }
                 },
-                onDeleteSession = viewModel::onDeleteSession
+                onDeleteSession = viewModel::onDeleteSession,
+                onApiKeySettings = { showApiKeyDialog = true }
             )
         }
     ) {
@@ -105,8 +107,8 @@ fun ChatScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { showApiKeyDialog = true }) {
-                            Icon(Icons.Default.Settings, contentDescription = "设置")
+                        IconButton(onClick = onNavigateToMemory) {
+                            Icon(Icons.Default.Settings, contentDescription = "记忆管理")
                         }
                     }
                 )
@@ -185,10 +187,17 @@ fun ChatContent(
             // 流式输出中的消息
             if (uiState.streamingContent.isNotEmpty()) {
                 item {
-                    MessageBubble(
-                        content = uiState.streamingContent,
-                        isFromUser = false
-                    )
+                    // 流式显示时隐藏记忆指令标记
+                    val displayContent = uiState.streamingContent
+                        .replace(Regex("""\[SAVE_MEMORY:\w+:.+?]"""), "")
+                        .replace(Regex("""\[SAVE_PERSON:.+?:.+?:.+?]"""), "")
+                        .trim()
+                    if (displayContent.isNotEmpty()) {
+                        MessageBubble(
+                            content = displayContent,
+                            isFromUser = false
+                        )
+                    }
                 }
             }
 
@@ -336,10 +345,11 @@ fun SessionDrawer(
     currentSessionId: Long?,
     onNewSession: () -> Unit,
     onSelectSession: (Long) -> Unit,
-    onDeleteSession: (Long) -> Unit
+    onDeleteSession: (Long) -> Unit,
+    onApiKeySettings: () -> Unit = {}
 ) {
     ModalDrawerSheet {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -365,7 +375,7 @@ fun SessionDrawer(
                 )
             }
 
-            LazyColumn {
+            LazyColumn(modifier = Modifier.weight(1f)) {
                 items(sessions, key = { it.id }) { session ->
                     SessionItem(
                         session = session,
@@ -374,6 +384,16 @@ fun SessionDrawer(
                         onDelete = { onDeleteSession(session.id) }
                     )
                 }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            TextButton(
+                onClick = onApiKeySettings,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
+                Text("  API Key 设置")
             }
         }
     }
