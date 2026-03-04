@@ -4,9 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ergou.app.data.local.entity.MessageEntity
 import com.ergou.app.data.local.entity.SessionEntity
+import com.ergou.app.data.remote.ErgouPrompt
+import com.ergou.app.data.remote.dto.Message
 import com.ergou.app.data.repository.ChatRepository
 import com.ergou.app.data.repository.ChatRepositoryImpl
 import com.ergou.app.data.repository.MemoryRepository
+import com.ergou.app.data.tool.ToolExecutor
 import com.ergou.app.util.ApiKeyProvider
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +32,7 @@ data class ChatUiState(
 class ChatViewModel(
     private val chatRepository: ChatRepository,
     private val memoryRepository: MemoryRepository,
+    private val toolExecutor: ToolExecutor,
     private val apiKeyProvider: ApiKeyProvider
 ) : ViewModel() {
 
@@ -132,14 +136,25 @@ class ChatViewModel(
                 val peopleContext = memoryRepository.buildPeopleContext()
                 val memoryContext = memoryRepository.buildMemoryContext()
 
-                // 流式获取AI回复（带上下文）
+                // 构建消息列表（system + 最近历史，历史已包含刚保存的用户消息）
+                val systemPrompt = ErgouPrompt.buildSystemPrompt(
+                    peopleContext = peopleContext,
+                    memoryContext = memoryContext
+                )
+
+                val history = chatRepository.getMessagesOnce(sessionId)
+                    .takeLast(MAX_HISTORY_MESSAGES)
+                    .map { Message(role = it.role, content = it.content) }
+
+                val messages = buildList {
+                    add(Message(role = "system", content = systemPrompt))
+                    addAll(history)
+                }
+
+                // 通过 ToolExecutor 发送（支持工具调用循环）
                 val responseBuilder = StringBuilder()
-                val repo = chatRepository as? ChatRepositoryImpl
 
-                val flow = repo?.sendMessageWithContext(sessionId, text, peopleContext, memoryContext)
-                    ?: chatRepository.sendMessage(sessionId, text)
-
-                flow.collect { chunk ->
+                toolExecutor.chatWithTools(messages).collect { chunk ->
                     responseBuilder.append(chunk)
                     _uiState.value = _uiState.value.copy(
                         streamingContent = responseBuilder.toString()
@@ -148,7 +163,7 @@ class ChatViewModel(
 
                 val fullResponse = responseBuilder.toString()
 
-                // 解析并执行记忆指令
+                // 解析并执行记忆指令（文本标记作为备用机制）
                 processMemoryCommands(fullResponse, sessionId)
 
                 // 保存AI回复（去掉指令标记）
@@ -170,6 +185,10 @@ class ChatViewModel(
                 )
             }
         }
+    }
+
+    companion object {
+        private const val MAX_HISTORY_MESSAGES = 20
     }
 
     /**

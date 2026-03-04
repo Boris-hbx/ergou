@@ -8,6 +8,13 @@ import com.ergou.app.data.repository.ChatRepository
 import com.ergou.app.data.repository.ChatRepositoryImpl
 import com.ergou.app.data.repository.MemoryRepository
 import com.ergou.app.data.repository.MemoryRepositoryImpl
+import com.ergou.app.data.tool.ToolExecutor
+import com.ergou.app.data.tool.ToolRegistry
+import com.ergou.app.data.tool.tools.GetDateTimeTool
+import com.ergou.app.data.tool.tools.SaveMemoryTool
+import com.ergou.app.data.tool.tools.SearchMemoryTool
+import com.ergou.app.data.tool.tools.SetReminderTool
+import com.ergou.app.data.tool.tools.SimpleCalculateTool
 import com.ergou.app.ui.chat.ChatViewModel
 import com.ergou.app.ui.memory.MemoryViewModel
 import com.ergou.app.util.ApiKeyProvider
@@ -40,6 +47,7 @@ val appModule = module {
     single { get<ErgouDatabase>().messageDao() }
     single { get<ErgouDatabase>().memoryDao() }
     single { get<ErgouDatabase>().personDao() }
+    single { get<ErgouDatabase>().reminderDao() }
 
     // Ktor HttpClient
     single {
@@ -64,11 +72,23 @@ val appModule = module {
     // LLM Service
     single<LLMService> { DeepSeekService(httpClient = get(), apiKeyProvider = get()) }
 
+    // Tool System
+    single {
+        ToolRegistry().apply {
+            register(GetDateTimeTool())
+            register(SimpleCalculateTool())
+            register(SaveMemoryTool(get()))
+            register(SearchMemoryTool(get()))
+            register(SetReminderTool(get(), androidContext()))
+        }
+    }
+    single { ToolExecutor(llmService = get(), toolRegistry = get()) }
+
     // Repositories
     single<ChatRepository> { ChatRepositoryImpl(sessionDao = get(), messageDao = get(), llmService = get()) }
     single<MemoryRepository> { MemoryRepositoryImpl(memoryDao = get(), personDao = get()) }
 
     // ViewModels
-    viewModel { ChatViewModel(chatRepository = get(), memoryRepository = get(), apiKeyProvider = get()) }
+    viewModel { ChatViewModel(chatRepository = get(), memoryRepository = get(), toolExecutor = get(), apiKeyProvider = get()) }
     viewModel { MemoryViewModel(memoryRepository = get()) }
 }

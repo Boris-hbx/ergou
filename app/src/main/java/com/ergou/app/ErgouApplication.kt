@@ -2,6 +2,7 @@ package com.ergou.app
 
 import android.app.Application
 import com.ergou.app.di.appModule
+import com.ergou.app.util.NotificationHelper
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
@@ -15,6 +16,9 @@ class ErgouApplication : Application() {
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
+
+        // 通知渠道
+        NotificationHelper.createChannel(this)
 
         // Koin DI
         startKoin {
