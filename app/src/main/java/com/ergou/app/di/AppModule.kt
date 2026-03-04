@@ -17,6 +17,7 @@ import com.ergou.app.data.tool.tools.SetReminderTool
 import com.ergou.app.data.tool.tools.SimpleCalculateTool
 import com.ergou.app.ui.chat.ChatViewModel
 import com.ergou.app.ui.memory.MemoryViewModel
+import com.ergou.app.ui.settings.SettingsViewModel
 import com.ergou.app.util.ApiKeyProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -91,4 +92,5 @@ val appModule = module {
     // ViewModels
     viewModel { ChatViewModel(chatRepository = get(), memoryRepository = get(), toolExecutor = get(), apiKeyProvider = get()) }
     viewModel { MemoryViewModel(memoryRepository = get()) }
+    viewModel { SettingsViewModel(apiKeyProvider = get(), memoryRepository = get()) }
 }

@@ -6,6 +6,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.ergou.app.ui.chat.ChatScreen
 import com.ergou.app.ui.memory.MemoryScreen
+import com.ergou.app.ui.settings.SettingsScreen
 
 @Composable
 fun ErgouNavigation() {
@@ -14,6 +15,12 @@ fun ErgouNavigation() {
     NavHost(navController = navController, startDestination = "chat") {
         composable("chat") {
             ChatScreen(
+                onNavigateToSettings = { navController.navigate("settings") }
+            )
+        }
+        composable("settings") {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
                 onNavigateToMemory = { navController.navigate("memory") }
             )
         }

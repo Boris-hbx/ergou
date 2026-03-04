@@ -63,7 +63,7 @@ import org.koin.androidx.compose.koinViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    onNavigateToMemory: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
     viewModel: ChatViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -107,8 +107,8 @@ fun ChatScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = onNavigateToMemory) {
-                            Icon(Icons.Default.Settings, contentDescription = "记忆管理")
+                        IconButton(onClick = onNavigateToSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "设置")
                         }
                     }
                 )
