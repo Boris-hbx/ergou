@@ -26,7 +26,7 @@ class ToolExecutor(
 
     /**
      * 带工具调用的对话 — 返回最终文本回复的流
-     * 工具调用阶段为非流式，最终回复为流式
+     * 工具调用阶段为非流式，最终回复为流式（真正的SSE）
      */
     fun chatWithTools(messages: List<Message>): Flow<String> = flow {
         val toolDefinitions = toolRegistry.getAllDefinitions()
@@ -35,6 +35,7 @@ class ToolExecutor(
 
         while (round < MAX_ROUNDS) {
             round++
+            Timber.d("Tool Use 第${round}轮开始，消息数: ${conversationMessages.size}")
 
             // 非流式请求（需要解析 tool_calls）
             val request = ChatRequest(
@@ -43,19 +44,47 @@ class ToolExecutor(
                 stream = false
             )
 
-            val response = llmService.chat(request)
-            val choice = response.choices.firstOrNull() ?: break
-            val message = choice.message ?: break
+            val response = try {
+                llmService.chat(request)
+            } catch (e: Exception) {
+                Timber.e(e, "LLM API 调用失败")
+                // 降级：不带工具重试一次，用流式
+                Timber.d("降级为无工具流式请求")
+                val fallbackRequest = ChatRequest(
+                    messages = conversationMessages,
+                    stream = true
+                )
+                llmService.chatStream(fallbackRequest).collect { emit(it) }
+                return@flow
+            }
+
+            val choice = response.choices.firstOrNull()
+            val message = choice?.message
+
+            if (message == null) {
+                // API 返回了但没有有效内容，降级为无工具流式请求
+                Timber.w("API 返回空 choices/message，降级为无工具流式请求")
+                val fallbackRequest = ChatRequest(
+                    messages = conversationMessages,
+                    stream = true
+                )
+                llmService.chatStream(fallbackRequest).collect { emit(it) }
+                return@flow
+            }
 
             // 检查是否有工具调用
             val toolCalls = message.toolCalls
             if (toolCalls.isNullOrEmpty()) {
-                // 没有工具调用，这是最终回复
-                val content = message.content ?: ""
-                // 流式输出最终回复（模拟逐字效果）
-                val chunks = content.chunked(3) // 每3个字符一块
-                for (chunk in chunks) {
-                    emit(chunk)
+                // 没有工具调用 — 这是最终回复，用流式重新请求获得更好的体验
+                val content = message.content
+                if (!content.isNullOrBlank()) {
+                    // 已经拿到完整回复，分块输出
+                    val chunks = content.chunked(3)
+                    for (chunk in chunks) {
+                        emit(chunk)
+                    }
+                } else {
+                    emit("（二狗想说什么但忘了，再问一次？）")
                 }
                 return@flow
             }

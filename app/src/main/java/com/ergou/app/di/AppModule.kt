@@ -21,6 +21,7 @@ import com.ergou.app.ui.settings.SettingsViewModel
 import com.ergou.app.util.ApiKeyProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
@@ -53,10 +54,17 @@ val appModule = module {
     // Ktor HttpClient
     single {
         HttpClient(OkHttp) {
+            install(HttpTimeout) {
+                requestTimeoutMillis = 120_000  // 2分钟，LLM非流式请求需要更长时间
+                connectTimeoutMillis = 30_000
+                socketTimeoutMillis = 120_000
+            }
             install(ContentNegotiation) {
                 json(Json {
                     ignoreUnknownKeys = true
                     prettyPrint = false
+                    explicitNulls = false   // 不序列化null字段，避免API拒绝
+                    encodeDefaults = true
                 })
             }
             install(Logging) {
@@ -65,7 +73,7 @@ val appModule = module {
                         Timber.tag("Ktor").d(message)
                     }
                 }
-                level = LogLevel.BODY
+                level = LogLevel.HEADERS
             }
         }
     }

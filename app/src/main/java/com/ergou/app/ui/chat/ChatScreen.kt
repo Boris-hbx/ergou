@@ -51,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,9 +72,9 @@ fun ChatScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    // 首次启动且没有 API Key 时弹出设置
+    // 首次启动且没有 API Key 时弹出设置（null=加载中，不弹）
     LaunchedEffect(uiState.isApiKeySet) {
-        if (!uiState.isApiKeySet) {
+        if (uiState.isApiKeySet == false) {
             showApiKeyDialog = true
         }
     }
@@ -223,7 +224,16 @@ fun ChatContent(
             }
         }
 
-        // 输入框
+        // 输入框 — 用 TextFieldValue 本地管理，避免 IME 中文输入被 StateFlow 打断
+        var textFieldValue by remember { mutableStateOf(TextFieldValue()) }
+
+        // ViewModel 清空输入时同步（发送后）
+        LaunchedEffect(uiState.inputText) {
+            if (uiState.inputText.isEmpty() && textFieldValue.text.isNotEmpty()) {
+                textFieldValue = TextFieldValue()
+            }
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -231,8 +241,11 @@ fun ChatContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             OutlinedTextField(
-                value = uiState.inputText,
-                onValueChange = onInputChanged,
+                value = textFieldValue,
+                onValueChange = { newValue ->
+                    textFieldValue = newValue
+                    onInputChanged(newValue.text)
+                },
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("说点什么...") },
                 maxLines = 4,
@@ -240,7 +253,7 @@ fun ChatContent(
             )
             IconButton(
                 onClick = onSend,
-                enabled = uiState.inputText.isNotBlank() && !uiState.isSending
+                enabled = textFieldValue.text.isNotBlank() && !uiState.isSending
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.Send,

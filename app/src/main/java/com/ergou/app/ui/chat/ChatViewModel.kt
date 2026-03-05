@@ -24,7 +24,7 @@ data class ChatUiState(
     val messages: List<MessageEntity> = emptyList(),
     val streamingContent: String = "",
     val inputText: String = "",
-    val isApiKeySet: Boolean = false,
+    val isApiKeySet: Boolean? = null,  // null=加载中, false=未设置, true=已设置
     val isSending: Boolean = false,
     val error: String? = null
 )
@@ -162,6 +162,15 @@ class ChatViewModel(
                 }
 
                 val fullResponse = responseBuilder.toString()
+
+                if (fullResponse.isBlank()) {
+                    _uiState.value = _uiState.value.copy(
+                        isSending = false,
+                        streamingContent = "",
+                        error = "二狗没回复，检查一下网络或 API Key"
+                    )
+                    return@launch
+                }
 
                 // 解析并执行记忆指令（文本标记作为备用机制）
                 processMemoryCommands(fullResponse, sessionId)
