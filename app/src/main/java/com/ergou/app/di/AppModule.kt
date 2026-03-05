@@ -6,6 +6,7 @@ import com.ergou.app.data.remote.api.DeepSeekService
 import com.ergou.app.data.remote.api.LLMService
 import com.ergou.app.data.repository.ChatRepository
 import com.ergou.app.data.repository.ChatRepositoryImpl
+import com.ergou.app.data.repository.MemoryExtractor
 import com.ergou.app.data.repository.MemoryRepository
 import com.ergou.app.data.repository.MemoryRepositoryImpl
 import com.ergou.app.data.tool.ToolExecutor
@@ -15,6 +16,8 @@ import com.ergou.app.data.tool.tools.SaveMemoryTool
 import com.ergou.app.data.tool.tools.SearchMemoryTool
 import com.ergou.app.data.tool.tools.SetReminderTool
 import com.ergou.app.data.tool.tools.SimpleCalculateTool
+import com.ergou.app.data.tool.tools.TranslateTool
+import com.ergou.app.data.tool.tools.WebSearchTool
 import com.ergou.app.ui.chat.ChatViewModel
 import com.ergou.app.ui.memory.MemoryViewModel
 import com.ergou.app.ui.settings.SettingsViewModel
@@ -89,6 +92,8 @@ val appModule = module {
             register(SaveMemoryTool(get()))
             register(SearchMemoryTool(get()))
             register(SetReminderTool(get(), androidContext()))
+            register(TranslateTool(get()))
+            register(WebSearchTool())
         }
     }
     single { ToolExecutor(llmService = get(), toolRegistry = get()) }
@@ -96,9 +101,10 @@ val appModule = module {
     // Repositories
     single<ChatRepository> { ChatRepositoryImpl(sessionDao = get(), messageDao = get(), llmService = get()) }
     single<MemoryRepository> { MemoryRepositoryImpl(memoryDao = get(), personDao = get()) }
+    single { MemoryExtractor(llmService = get(), memoryRepository = get()) }
 
     // ViewModels
-    viewModel { ChatViewModel(chatRepository = get(), memoryRepository = get(), toolExecutor = get(), apiKeyProvider = get()) }
+    viewModel { ChatViewModel(chatRepository = get(), memoryRepository = get(), toolExecutor = get(), apiKeyProvider = get(), memoryExtractor = get()) }
     viewModel { MemoryViewModel(memoryRepository = get()) }
     viewModel { SettingsViewModel(apiKeyProvider = get(), memoryRepository = get()) }
 }

@@ -279,7 +279,7 @@ fun WelcomeMessage() {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "有事说事，没事别烦我。",
+            text = "善谋者胜，善行者成。",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

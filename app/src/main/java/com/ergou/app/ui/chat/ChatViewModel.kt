@@ -8,6 +8,7 @@ import com.ergou.app.data.remote.ErgouPrompt
 import com.ergou.app.data.remote.dto.Message
 import com.ergou.app.data.repository.ChatRepository
 import com.ergou.app.data.repository.ChatRepositoryImpl
+import com.ergou.app.data.repository.MemoryExtractor
 import com.ergou.app.data.repository.MemoryRepository
 import com.ergou.app.data.tool.ToolExecutor
 import com.ergou.app.util.ApiKeyProvider
@@ -33,7 +34,8 @@ class ChatViewModel(
     private val chatRepository: ChatRepository,
     private val memoryRepository: MemoryRepository,
     private val toolExecutor: ToolExecutor,
-    private val apiKeyProvider: ApiKeyProvider
+    private val apiKeyProvider: ApiKeyProvider,
+    private val memoryExtractor: MemoryExtractor
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -183,6 +185,11 @@ class ChatViewModel(
                     isSending = false,
                     streamingContent = ""
                 )
+
+                // 后台自动提取记忆（不阻塞UI）
+                viewModelScope.launch {
+                    memoryExtractor.extractFromConversation(text, cleanResponse, sessionId)
+                }
 
                 Timber.d("收到回复: ${cleanResponse.take(50)}...")
             } catch (e: Exception) {
